@@ -87,6 +87,12 @@ The CLI SHALL provide a top-level `validate` command for validating changes and 
 - **AND** validate the specified item
 - **AND** display validation results
 
+#### Scenario: Direct hierarchical spec validation
+
+- **WHEN** executing `openspec validate cli/show`
+- **THEN** detect that `cli/show` is a hierarchical spec ID
+- **AND** resolve and validate the spec at `openspec/specs/cli/show/spec.md`
+
 ### Requirement: Bulk and filtered validation
 
 The validate command SHALL support flags for bulk validation (--all) and filtered validation by type (--changes, --specs).
@@ -106,7 +112,7 @@ The validate command SHALL support flags for bulk validation (--all) and filtere
 - **AND** exclude the `openspec/changes/archive/` directory
 
 - **WHEN** validating with `--specs`
-- **THEN** include all specs that have a `spec.md` under `openspec/specs/<id>/spec.md`
+- **THEN** recursively discover and include all specs that have a `spec.md` at any depth under `openspec/specs/`
 
 #### Scenario: Validate all changes
 
@@ -185,7 +191,7 @@ The validate command SHALL handle ambiguous names and explicit type overrides to
 
 - **WHEN** the `<item-name>` matches neither a change nor a spec
 - **THEN** print a not-found error
-- **AND** show nearest-match suggestions when available
+- **AND** show nearest-match suggestions including hierarchical spec IDs
 - **AND** exit with code 1
 
 #### Scenario: Explicit type override
@@ -195,6 +201,7 @@ The validate command SHALL handle ambiguous names and explicit type overrides to
 
 - **WHEN** executing `openspec validate --type spec <item>`
 - **THEN** treat `<item>` as a spec ID and validate it (skipping auto-detection)
+- **AND** support hierarchical spec IDs (e.g., `openspec validate --type spec cli/show`)
 
 ### Requirement: Interactivity controls
 

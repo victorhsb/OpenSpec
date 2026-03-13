@@ -15,9 +15,15 @@ The command SHALL scan and analyze either active changes or specs based on the s
 
 #### Scenario: Scanning for specs
 - **WHEN** `openspec list --specs` is executed
-- **THEN** scan the `openspec/specs/` directory for capabilities
+- **THEN** recursively scan the `openspec/specs/` directory tree for capabilities at any depth
 - **AND** read each capability's `spec.md`
 - **AND** parse requirements to compute requirement counts
+
+#### Scenario: Scanning for specs in subtree
+- **WHEN** `openspec list --specs cli/` is executed
+- **THEN** recursively scan only specs whose ID starts with `cli/` at a segment boundary (i.e., the character after the prefix must be a path separator or the prefix must end with `/`)
+- **AND** display them with their full hierarchical IDs
+- **AND** `cli/` matches `cli/show` and `cli/bar/baz` but NOT `client/foo`
 
 ### Requirement: Task Counting
 
@@ -43,7 +49,7 @@ The command SHALL display items in a clear, readable table format with mode-appr
 #### Scenario: Displaying spec list
 - **WHEN** displaying the list of specs
 - **THEN** show a table with columns:
-  - Spec id (directory name)
+  - Spec id (full hierarchical path, e.g., `cli/show` or `cli-show`)
   - Requirement count (e.g., "requirements 12")
 
 ### Requirement: Flags
@@ -85,12 +91,18 @@ The command SHALL gracefully handle missing files and directories with appropria
 
 ### Requirement: Sorting
 
-The command SHALL maintain consistent ordering of changes for predictable output.
+The command SHALL maintain consistent ordering of items for predictable output.
 
 #### Scenario: Ordering changes
 
 - **WHEN** displaying multiple changes
 - **THEN** sort them in alphabetical order by change name
+
+#### Scenario: Ordering specs
+
+- **WHEN** displaying multiple specs
+- **THEN** sort them in alphabetical order by full spec ID
+- **AND** hierarchical IDs sort naturally (e.g., `cli/archive` before `cli/show`)
 
 ## Why
 
