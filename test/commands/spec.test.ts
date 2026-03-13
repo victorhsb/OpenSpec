@@ -273,6 +273,82 @@ This section has no actual requirements`;
     });
   });
 
+  describe('spec list — hierarchical', () => {
+    beforeEach(async () => {
+      // Add a hierarchical spec alongside the existing flat ones
+      await fs.mkdir(path.join(specsDir, 'cli', 'show'), { recursive: true });
+      await fs.writeFile(path.join(specsDir, 'cli', 'show', 'spec.md'), `## Purpose\nCLI show spec.\n\n## Requirements\n\n### Requirement: Show\nSHALL show.\n\n#### Scenario: Basic\n- **GIVEN** a spec\n- **WHEN** shown\n- **THEN** displayed`);
+
+      await fs.mkdir(path.join(specsDir, 'cli', 'validate'), { recursive: true });
+      await fs.writeFile(path.join(specsDir, 'cli', 'validate', 'spec.md'), `## Purpose\nCLI validate spec.\n\n## Requirements\n\n### Requirement: Validate\nSHALL validate.\n\n#### Scenario: Basic\n- **GIVEN** a spec\n- **WHEN** validated\n- **THEN** reported`);
+    });
+
+    it('should list hierarchical IDs alongside flat IDs', () => {
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testDir);
+        const output = execSync(`node ${openspecBin} spec list`, { encoding: 'utf-8' });
+        expect(output).toContain('auth');
+        expect(output).toContain('payment');
+        expect(output).toContain('cli/show');
+        expect(output).toContain('cli/validate');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should filter by subtree prefix', () => {
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testDir);
+        const output = execSync(`node ${openspecBin} spec list cli/`, { encoding: 'utf-8' });
+        expect(output).toContain('cli/show');
+        expect(output).toContain('cli/validate');
+        expect(output).not.toContain('auth');
+        expect(output).not.toContain('payment');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should not match on partial segment boundary (client/ should not match cli/)', () => {
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testDir);
+        // Create a "client/foo" spec to verify prefix boundary is respected
+        fs.mkdir(path.join(specsDir, 'client', 'foo'), { recursive: true }).then(() =>
+          fs.writeFile(path.join(specsDir, 'client', 'foo', 'spec.md'), `## Purpose\nClient spec.\n\n## Requirements\n\n### Requirement: Foo\nSHALL foo.\n\n#### Scenario: Basic\n- **GIVEN** it\n- **WHEN** run\n- **THEN** ok`)
+        );
+        const output = execSync(`node ${openspecBin} spec list cli/`, { encoding: 'utf-8' });
+        expect(output).not.toContain('client/foo');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should show hierarchical spec via spec show', () => {
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testDir);
+        const output = execSync(`node ${openspecBin} spec show cli/show`, { encoding: 'utf-8' });
+        expect(output).toContain('CLI show spec');
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should validate a hierarchical spec', () => {
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testDir);
+        const output = execSync(`node ${openspecBin} spec validate cli/show`, { encoding: 'utf-8' });
+        expect(output).toContain("Specification 'cli/show' is valid");
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
   describe('error handling', () => {
     it('should handle non-existent spec gracefully', () => {
       const originalCwd = process.cwd();

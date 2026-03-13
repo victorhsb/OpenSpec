@@ -1,5 +1,12 @@
 export function nearestMatches(input: string, candidates: string[], max: number = 5): string[] {
-  const scored = candidates.map(candidate => ({ candidate, distance: levenshtein(input, candidate) }));
+  const scored = candidates.map(candidate => {
+    const fullDistance = levenshtein(input, candidate);
+    // For hierarchical IDs (e.g. "cli/show"), also score against the leaf segment.
+    // This lets users type "show" and get "cli/show" suggested.
+    const slashIdx = candidate.lastIndexOf('/');
+    const leafDistance = slashIdx >= 0 ? levenshtein(input, candidate.slice(slashIdx + 1)) : fullDistance;
+    return { candidate, distance: Math.min(fullDistance, leafDistance) };
+  });
   scored.sort((a, b) => a.distance - b.distance);
   return scored.slice(0, max).map(s => s.candidate);
 }

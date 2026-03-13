@@ -1,11 +1,11 @@
 import { program } from 'commander';
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync } from 'fs';
 import { MarkdownParser } from '../core/parsers/markdown-parser.js';
 import { Validator } from '../core/validation/validator.js';
 import type { Spec } from '../core/schemas/index.js';
 import { isInteractive } from '../utils/interactive.js';
 import { getSpecIds } from '../utils/item-discovery.js';
+import { specIdToPath } from '../utils/spec-paths.js';
 
 const SPECS_DIR = 'openspec/specs';
 
@@ -82,7 +82,7 @@ export class SpecCommand {
       }
     }
 
-    const specPath = join(this.SPECS_DIR, specId, 'spec.md');
+    const specPath = specIdToPath(specId, this.SPECS_DIR);
     if (!existsSync(specPath)) {
       throw new Error(`Spec '${specId}' not found at openspec/specs/${specId}/spec.md`);
     }
@@ -137,42 +137,42 @@ export function registerSpecCommand(rootProgram: typeof program) {
     });
 
   specCommand
-    .command('list')
-    .description('List all available specifications')
+    .command('list [prefix]')
+    .description('List all available specifications. Optionally filter by subtree prefix (e.g. "cli/" lists only specs under cli/)')
+    .addHelpText('after', `
+Subtree filtering:
+  openspec spec list           List all specs
+  openspec spec list cli/      List only specs whose ID starts with "cli/" (segment boundary)
+                               Matches: cli/show, cli/validate
+                               Does not match: client/config
+
+Spec IDs use forward-slash separators (e.g. "cli/show", "domain/project/feature").
+The prefix must end with "/" or one is appended automatically.`)
     .option('--json', 'Output as JSON')
     .option('--long', 'Show id and title with counts')
-    .action((options: { json?: boolean; long?: boolean }) => {
+    .action(async (prefix: string | undefined, options: { json?: boolean; long?: boolean }) => {
       try {
-        if (!existsSync(SPECS_DIR)) {
-          console.log('No items found');
-          return;
+        let allIds = await getSpecIds();
+
+        if (prefix) {
+          // Segment-boundary filtering: prefix must end with "/" to denote a boundary.
+          // "cli/" matches "cli/foo" and "cli/bar/baz" but NOT "client/foo".
+          const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+          allIds = allIds.filter(id => id.startsWith(normalizedPrefix));
         }
 
-        const specs = readdirSync(SPECS_DIR, { withFileTypes: true })
-          .filter(dirent => dirent.isDirectory())
-          .map(dirent => {
-            const specPath = join(SPECS_DIR, dirent.name, 'spec.md');
-            if (existsSync(specPath)) {
-              try {
-                const spec = parseSpecFromFile(specPath, dirent.name);
-                
-                return {
-                  id: dirent.name,
-                  title: spec.name,
-                  requirementCount: spec.requirements.length
-                };
-              } catch {
-                return {
-                  id: dirent.name,
-                  title: dirent.name,
-                  requirementCount: 0
-                };
-              }
+        const specs = allIds.map(id => {
+          const specPath = specIdToPath(id, SPECS_DIR);
+          if (existsSync(specPath)) {
+            try {
+              const spec = parseSpecFromFile(specPath, id);
+              return { id, title: spec.name, requirementCount: spec.requirements.length };
+            } catch {
+              return { id, title: id, requirementCount: 0 };
             }
-            return null;
-          })
-          .filter((spec): spec is { id: string; title: string; requirementCount: number } => spec !== null)
-          .sort((a, b) => a.id.localeCompare(b.id));
+          }
+          return null;
+        }).filter((spec): spec is { id: string; title: string; requirementCount: number } => spec !== null);
 
         if (options.json) {
           console.log(JSON.stringify(specs, null, 2));
@@ -217,8 +217,8 @@ export function registerSpecCommand(rootProgram: typeof program) {
           }
         }
 
-        const specPath = join(SPECS_DIR, specId, 'spec.md');
-        
+        const specPath = specIdToPath(specId, SPECS_DIR);
+
         if (!existsSync(specPath)) {
           throw new Error(`Spec '${specId}' not found at openspec/specs/${specId}/spec.md`);
         }

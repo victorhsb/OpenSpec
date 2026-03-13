@@ -1,6 +1,8 @@
 import { z, ZodError } from 'zod';
 import { readFileSync, promises as fs } from 'fs';
 import path from 'path';
+import fg from 'fast-glob';
+import { specIdToPath } from '../../utils/spec-paths.js';
 import { SpecSchema, ChangeSchema, Spec, Change } from '../schemas/index.js';
 import { MarkdownParser } from '../parsers/markdown-parser.js';
 import { ChangeParser } from '../parsers/change-parser.js';
@@ -119,11 +121,11 @@ export class Validator {
     const emptySectionSpecs: Array<{ path: string; sections: string[] }> = [];
 
     try {
-      const entries = await fs.readdir(specsDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const specName = entry.name;
-        const specFile = path.join(specsDir, specName, 'spec.md');
+      // Recursively discover delta specs at any nesting depth
+      const matches = await fg('**/spec.md', { cwd: specsDir, dot: false, onlyFiles: true });
+      for (const match of matches) {
+        const specId = match.slice(0, -'/spec.md'.length); // e.g. 'cli/show'
+        const specFile = specIdToPath(specId, specsDir);
         let content: string | undefined;
         try {
           content = await fs.readFile(specFile, 'utf-8');
@@ -132,7 +134,7 @@ export class Validator {
         }
 
         const plan = parseDeltaSpec(content);
-        const entryPath = `${specName}/spec.md`;
+        const entryPath = `${specId}/spec.md`;
         const sectionNames: string[] = [];
         if (plan.sectionPresence.added) sectionNames.push('## ADDED Requirements');
         if (plan.sectionPresence.modified) sectionNames.push('## MODIFIED Requirements');
@@ -362,16 +364,22 @@ export class Validator {
   private extractNameFromPath(filePath: string): string {
     const normalizedPath = FileSystemUtils.toPosixPath(filePath);
     const parts = normalizedPath.split('/');
-    
-    // Look for the directory name after 'specs' or 'changes'
+
+    // Find the index of 'specs' or 'changes' and return the full relative path
+    // from after that segment up to (but not including) the final 'spec.md' file.
+    // e.g. 'openspec/specs/cli/show/spec.md' → 'cli/show'
     for (let i = parts.length - 1; i >= 0; i--) {
       if (parts[i] === 'specs' || parts[i] === 'changes') {
         if (i < parts.length - 1) {
-          return parts[i + 1];
+          // Collect all parts between the anchor and the last filename
+          const tail = parts.slice(i + 1);
+          // Drop trailing 'spec.md' if present
+          if (tail[tail.length - 1] === 'spec.md') tail.pop();
+          if (tail.length > 0) return tail.join('/');
         }
       }
     }
-    
+
     // Fallback to filename without extension if not in expected structure
     const fileName = parts[parts.length - 1] ?? '';
     const dotIndex = fileName.lastIndexOf('.');

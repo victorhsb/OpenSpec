@@ -4,6 +4,7 @@ import { Validator } from '../core/validation/validator.js';
 import { isInteractive, resolveNoInteractive } from '../utils/interactive.js';
 import { getActiveChangeIds, getSpecIds } from '../utils/item-discovery.js';
 import { nearestMatches } from '../utils/match.js';
+import { specIdToPath } from '../utils/spec-paths.js';
 
 type ItemType = 'change' | 'spec';
 
@@ -139,7 +140,7 @@ export class ValidateCommand {
       process.exitCode = report.valid ? 0 : 1;
       return;
     }
-    const file = path.join(process.cwd(), 'openspec', 'specs', id, 'spec.md');
+    const file = specIdToPath(id, path.join(process.cwd(), 'openspec', 'specs'));
     const start = Date.now();
     const report = await validator.validateSpec(file);
     const durationMs = Date.now() - start;
@@ -206,7 +207,7 @@ export class ValidateCommand {
     for (const id of specIds) {
       queue.push(async () => {
         const start = Date.now();
-        const file = path.join(process.cwd(), 'openspec', 'specs', id, 'spec.md');
+        const file = specIdToPath(id, path.join(process.cwd(), 'openspec', 'specs'));
         const report = await validator.validateSpec(file);
         const durationMs = Date.now() - start;
         return { id, type: 'spec' as const, valid: report.valid, issues: report.issues, durationMs };

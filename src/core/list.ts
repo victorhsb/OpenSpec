@@ -2,8 +2,9 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { getTaskProgressForChange, formatTaskStatus } from '../utils/task-progress.js';
 import { readFileSync } from 'fs';
-import { join } from 'path';
 import { MarkdownParser } from './parsers/markdown-parser.js';
+import { getSpecIds } from '../utils/item-discovery.js';
+import { specIdToPath } from '../utils/spec-paths.js';
 
 interface ChangeInfo {
   name: string;
@@ -15,6 +16,7 @@ interface ChangeInfo {
 interface ListOptions {
   sort?: 'recent' | 'name';
   json?: boolean;
+  specsPrefix?: string;
 }
 
 /**
@@ -153,36 +155,34 @@ export class ListCommand {
 
     // specs mode
     const specsDir = path.join(targetPath, 'openspec', 'specs');
-    try {
-      await fs.access(specsDir);
-    } catch {
-      console.log('No specs found.');
-      return;
+
+    let allIds = await getSpecIds(targetPath);
+
+    if (options.specsPrefix) {
+      // Segment-boundary filtering: "cli/" matches "cli/foo" but not "client/foo"
+      const normalizedPrefix = options.specsPrefix.endsWith('/') ? options.specsPrefix : `${options.specsPrefix}/`;
+      allIds = allIds.filter(id => id.startsWith(normalizedPrefix));
     }
 
-    const entries = await fs.readdir(specsDir, { withFileTypes: true });
-    const specDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-    if (specDirs.length === 0) {
+    if (allIds.length === 0) {
       console.log('No specs found.');
       return;
     }
 
     type SpecInfo = { id: string; requirementCount: number };
     const specs: SpecInfo[] = [];
-    for (const id of specDirs) {
-      const specPath = join(specsDir, id, 'spec.md');
+    for (const id of allIds) {
+      const specPath = specIdToPath(id, specsDir);
       try {
         const content = readFileSync(specPath, 'utf-8');
         const parser = new MarkdownParser(content);
         const spec = parser.parseSpec(id);
         specs.push({ id, requirementCount: spec.requirements.length });
       } catch {
-        // If spec cannot be read or parsed, include with 0 count
         specs.push({ id, requirementCount: 0 });
       }
     }
 
-    specs.sort((a, b) => a.id.localeCompare(b.id));
     console.log('Specs:');
     const padding = '  ';
     const nameWidth = Math.max(...specs.map(s => s.id.length));

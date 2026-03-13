@@ -3,6 +3,8 @@ import path from 'path';
 import { getTaskProgressForChange, formatTaskStatus } from '../utils/task-progress.js';
 import { Validator } from './validation/validator.js';
 import chalk from 'chalk';
+import fg from 'fast-glob';
+import { specIdToPath } from '../utils/spec-paths.js';
 import {
   findSpecUpdates,
   buildUpdatedSpec,
@@ -114,19 +116,17 @@ export class ArchiveCommand {
       const changeSpecsDir = path.join(changeDir, 'specs');
       let hasDeltaSpecs = false;
       try {
-        const candidates = await fs.readdir(changeSpecsDir, { withFileTypes: true });
-        for (const c of candidates) {
-          if (c.isDirectory()) {
-            try {
-              const candidatePath = path.join(changeSpecsDir, c.name, 'spec.md');
-              await fs.access(candidatePath);
-              const content = await fs.readFile(candidatePath, 'utf-8');
-              if (/^##\s+(ADDED|MODIFIED|REMOVED|RENAMED)\s+Requirements/m.test(content)) {
-                hasDeltaSpecs = true;
-                break;
-              }
-            } catch {}
-          }
+        const matches = await fg('**/spec.md', { cwd: changeSpecsDir, dot: false, onlyFiles: true });
+        for (const match of matches) {
+          try {
+            const specId = match.slice(0, -'/spec.md'.length);
+            const candidatePath = specIdToPath(specId, changeSpecsDir);
+            const content = await fs.readFile(candidatePath, 'utf-8');
+            if (/^##\s+(ADDED|MODIFIED|REMOVED|RENAMED)\s+Requirements/m.test(content)) {
+              hasDeltaSpecs = true;
+              break;
+            }
+          } catch {}
         }
       } catch {}
       if (hasDeltaSpecs) {
@@ -204,8 +204,7 @@ export class ArchiveCommand {
         console.log('\nSpecs to update:');
         for (const update of specUpdates) {
           const status = update.exists ? 'update' : 'create';
-          const capability = path.basename(path.dirname(update.target));
-          console.log(`  ${capability}: ${status}`);
+          console.log(`  ${update.specId}: ${status}`);
         }
 
         let shouldUpdateSpecs = true;
@@ -237,7 +236,7 @@ export class ArchiveCommand {
           // All validations passed; pre-validate rebuilt full spec and then write files and display counts
           let totals = { added: 0, modified: 0, removed: 0, renamed: 0 };
           for (const p of prepared) {
-            const specName = path.basename(path.dirname(p.update.target));
+            const specName = p.update.specId;
             if (!skipValidation) {
               const report = await new Validator().validateSpecContent(specName, p.rebuilt);
               if (!report.valid) {

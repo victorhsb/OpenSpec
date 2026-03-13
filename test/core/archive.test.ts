@@ -796,12 +796,90 @@ E1 updated`);
       
       // Execute without --yes flag but skip validation to test task warning
       await archiveCommand.execute(changeName, { noValidate: true });
-      
+
       // Verify archive was cancelled
       expect(console.log).toHaveBeenCalledWith('Archive cancelled.');
-      
+
       // Verify change was not archived
       await expect(fs.access(changeDir)).resolves.not.toThrow();
+    });
+
+    it('should discover and apply a hierarchical delta spec (cli/show)', async () => {
+      const changeName = 'hierarchical-delta';
+      const changeDir = path.join(tempDir, 'openspec', 'changes', changeName);
+      const deltaSpecDir = path.join(changeDir, 'specs', 'cli', 'show');
+      await fs.mkdir(deltaSpecDir, { recursive: true });
+
+      const deltaSpec = `## ADDED Requirements
+
+### Requirement: Show hierarchical spec
+The command SHALL accept hierarchical spec IDs.
+
+#### Scenario: Show cli/show
+- **GIVEN** a spec at cli/show
+- **WHEN** the user runs openspec show cli/show
+- **THEN** the spec is displayed`;
+      await fs.writeFile(path.join(deltaSpecDir, 'spec.md'), deltaSpec);
+      await fs.writeFile(path.join(changeDir, 'tasks.md'), '- [x] Task 1\n');
+
+      await archiveCommand.execute(changeName, { yes: true, noValidate: true });
+
+      // Spec should be created at openspec/specs/cli/show/spec.md
+      const mainSpecPath = path.join(tempDir, 'openspec', 'specs', 'cli', 'show', 'spec.md');
+      await expect(fs.access(mainSpecPath)).resolves.not.toThrow();
+
+      const content = await fs.readFile(mainSpecPath, 'utf-8');
+      expect(content).toContain('Show hierarchical spec');
+    });
+
+    it('should display full hierarchical spec ID in archive confirmation output', async () => {
+      const changeName = 'hierarchical-display';
+      const changeDir = path.join(tempDir, 'openspec', 'changes', changeName);
+      const deltaSpecDir = path.join(changeDir, 'specs', 'domain', 'feature');
+      await fs.mkdir(deltaSpecDir, { recursive: true });
+
+      const deltaSpec = `## ADDED Requirements
+
+### Requirement: Domain feature
+The system SHALL support domain features.
+
+#### Scenario: Basic
+- **GIVEN** the system is running
+- **WHEN** a feature is requested
+- **THEN** it is provided`;
+      await fs.writeFile(path.join(deltaSpecDir, 'spec.md'), deltaSpec);
+      await fs.writeFile(path.join(changeDir, 'tasks.md'), '- [x] Done\n');
+
+      await archiveCommand.execute(changeName, { yes: true, noValidate: true });
+
+      // Confirm display used full ID "domain/feature", not just "feature"
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringContaining('domain/feature')
+      );
+    });
+
+    it('should create intermediate directories for deeply nested delta spec', async () => {
+      const changeName = 'deep-nested';
+      const changeDir = path.join(tempDir, 'openspec', 'changes', changeName);
+      const deltaSpecDir = path.join(changeDir, 'specs', 'a', 'b', 'c');
+      await fs.mkdir(deltaSpecDir, { recursive: true });
+
+      const deltaSpec = `## ADDED Requirements
+
+### Requirement: Deep nested
+The system SHALL nest deeply.
+
+#### Scenario: Works
+- **GIVEN** a deep path
+- **WHEN** archived
+- **THEN** directories are created`;
+      await fs.writeFile(path.join(deltaSpecDir, 'spec.md'), deltaSpec);
+      await fs.writeFile(path.join(changeDir, 'tasks.md'), '- [x] Done\n');
+
+      await archiveCommand.execute(changeName, { yes: true, noValidate: true });
+
+      const mainSpecPath = path.join(tempDir, 'openspec', 'specs', 'a', 'b', 'c', 'spec.md');
+      await expect(fs.access(mainSpecPath)).resolves.not.toThrow();
     });
   });
 });
